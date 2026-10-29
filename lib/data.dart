@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'calculadora.dart';
+export 'calculadora.dart';
 
 enum EstadoPrestamo { activo, atrasado, cancelado }
 
@@ -124,6 +126,8 @@ class AppStore extends ChangeNotifier {
   String telefono = '+51 987 654 321';
   String clave = '12345678';
 
+  ConfigTasas configTasas = ConfigTasas();
+
   bool claveCorrecta(String v) => v == clave;
 
   void cambiarClave(String nueva) {
@@ -133,6 +137,25 @@ class AppStore extends ChangeNotifier {
 
   void cambiarCorreo(String nuevo) {
     correo = nuevo;
+    notifyListeners();
+  }
+
+  void actualizarConfigTasas({
+    double? interesPctDefault,
+    int? semanasDefault,
+    List<int>? plazosPermitidos,
+    double? recargoPorSemana,
+  }) {
+    if (interesPctDefault != null) {
+      configTasas.interesPctDefault = interesPctDefault;
+    }
+    if (semanasDefault != null) configTasas.semanasDefault = semanasDefault;
+    if (plazosPermitidos != null) {
+      configTasas.plazosPermitidos = List<int>.from(plazosPermitidos);
+    }
+    if (recargoPorSemana != null) {
+      configTasas.recargoPorSemana = recargoPorSemana;
+    }
     notifyListeners();
   }
 
@@ -167,39 +190,41 @@ class AppStore extends ChangeNotifier {
     ),
   ];
 
+  // Seed con interés flat CrediMax (20%): total = capital × 1.20
   late final prestamos = <Prestamo>[
     Prestamo(
       id: 'p1',
       codigo: '0781',
       clienteId: 'c1',
       monto: 800,
-      tasa: 5,
+      tasa: 20,
       frecuencia: 'Semanal',
       fecha: '21/09/2026',
       estado: EstadoPrestamo.activo,
+      // 800 × 1.20 = 960 → 8 cuotas de 120 (muestra 5–8)
       cuotas: [
         Cuota(
           numero: 5,
           fecha: '18/09',
-          monto: 200,
+          monto: 120,
           estado: EstadoCuota.pagada,
         ),
         Cuota(
           numero: 6,
           fecha: '25/09',
-          monto: 200,
+          monto: 120,
           estado: EstadoCuota.pendiente,
         ),
         Cuota(
           numero: 7,
           fecha: '02/10',
-          monto: 200,
+          monto: 120,
           estado: EstadoCuota.pendiente,
         ),
         Cuota(
           numero: 8,
           fecha: '09/10',
-          monto: 200,
+          monto: 120,
           estado: EstadoCuota.pendiente,
         ),
       ],
@@ -209,21 +234,22 @@ class AppStore extends ChangeNotifier {
       codigo: '0142',
       clienteId: 'c2',
       monto: 150,
-      tasa: 8,
+      tasa: 20,
       frecuencia: 'Quincenal',
       fecha: '01/09/2026',
       estado: EstadoPrestamo.atrasado,
+      // 150 × 1.20 = 180 → 2 cuotas de 90
       cuotas: [
         Cuota(
           numero: 1,
           fecha: '15/09',
-          monto: 80,
+          monto: 90,
           estado: EstadoCuota.vencida,
         ),
         Cuota(
           numero: 2,
           fecha: '30/09',
-          monto: 70,
+          monto: 90,
           estado: EstadoCuota.pendiente,
         ),
       ],
@@ -233,21 +259,22 @@ class AppStore extends ChangeNotifier {
       codigo: '0090',
       clienteId: 'c3',
       monto: 500,
-      tasa: 4,
+      tasa: 20,
       frecuencia: 'Mensual',
       fecha: '02/06/2026',
       estado: EstadoPrestamo.cancelado,
+      // 500 × 1.20 = 600 → 2 cuotas de 300
       cuotas: [
         Cuota(
           numero: 1,
           fecha: '02/07',
-          monto: 250,
+          monto: 300,
           estado: EstadoCuota.pagada,
         ),
         Cuota(
           numero: 2,
           fecha: '02/08',
-          monto: 250,
+          monto: 300,
           estado: EstadoCuota.pagada,
         ),
       ],
@@ -257,27 +284,28 @@ class AppStore extends ChangeNotifier {
       codigo: '0210',
       clienteId: 'c4',
       monto: 300,
-      tasa: 6,
+      tasa: 20,
       frecuencia: 'Semanal',
       fecha: '10/09/2026',
       estado: EstadoPrestamo.atrasado,
+      // 300 × 1.20 = 360 → 3 cuotas de 120
       cuotas: [
         Cuota(
           numero: 1,
           fecha: '17/09',
-          monto: 100,
+          monto: 120,
           estado: EstadoCuota.vencida,
         ),
         Cuota(
           numero: 2,
           fecha: '24/09',
-          monto: 100,
+          monto: 120,
           estado: EstadoCuota.pendiente,
         ),
         Cuota(
           numero: 3,
           fecha: '01/10',
-          monto: 100,
+          monto: 120,
           estado: EstadoCuota.pendiente,
         ),
       ],
@@ -448,16 +476,24 @@ class AppStore extends ChangeNotifier {
     required String frecuencia,
     required String fecha,
   }) {
-    final cuota = (monto * (1 + tasa / 100)) / nCuotas;
-    final cuotas = List.generate(
-      nCuotas,
-      (i) => Cuota(
-        numero: i + 1,
-        fecha: 'C${i + 1}',
-        monto: double.parse(cuota.toStringAsFixed(2)),
-        estado: EstadoCuota.pendiente,
-      ),
+    final inicio = parseFecha(fecha) ?? DateTime.now();
+    final preview = calcularPreview(
+      capital: monto,
+      interesPct: tasa,
+      nCuotas: nCuotas,
+      fechaInicio: inicio,
+      frecuencia: frecuencia,
     );
+    final cuotas = preview.letras
+        .map(
+          (l) => Cuota(
+            numero: l.numero,
+            fecha: fechaCorta(l.fecha),
+            monto: l.monto,
+            estado: EstadoCuota.pendiente,
+          ),
+        )
+        .toList();
     final codigo = (700 + prestamos.length).toString().padLeft(4, '0');
     final p = Prestamo(
       id: 'p${prestamos.length + 1}',
@@ -473,6 +509,39 @@ class AppStore extends ChangeNotifier {
     prestamos.insert(0, p);
     notifyListeners();
     return p;
+  }
+
+  List<Prestamo> get prestamosAtrasados =>
+      prestamos.where((p) => p.estado == EstadoPrestamo.atrasado).toList();
+
+  int get clientesActivos => clientes
+      .where((c) {
+        final e = estadoCliente(c);
+        return e == 'ACTIVO' || e == 'ATRASADO';
+      })
+      .length;
+
+  /// Mora sugerida para una cuota vencida (S/ recargo × semanas de atraso).
+  double moraDeCuota(Cuota cuota, {DateTime? pago}) {
+    if (cuota.estado != EstadoCuota.vencida) return 0;
+    final venc = _parseFechaCorta(cuota.fecha) ?? parseFecha(cuota.fecha);
+    if (venc == null) return configTasas.recargoPorSemana;
+    return calcularMora(
+      vencimiento: venc,
+      pago: pago ?? DateTime.now(),
+      recargoPorSemana: configTasas.recargoPorSemana,
+    );
+  }
+
+  DateTime? _parseFechaCorta(String f) {
+    final m = RegExp(r'^(\d{1,2})/(\d{1,2})$').firstMatch(f.trim());
+    if (m == null) return null;
+    final now = DateTime.now();
+    return DateTime(
+      now.year,
+      int.parse(m.group(2)!),
+      int.parse(m.group(1)!),
+    );
   }
 
   void registrarPago(

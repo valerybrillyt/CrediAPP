@@ -157,8 +157,66 @@ PreferredSizeWidget barra(String titulo, {List<Widget>? actions}) {
   );
 }
 
-void aviso(BuildContext context, String mensaje) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensaje)));
+void aviso(BuildContext context, String mensaje, {bool error = false}) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(mensaje),
+      backgroundColor: error ? const Color(0xFFB42318) : CrediColors.vinoOscuro,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
+  );
+}
+
+class EmptyHint extends StatelessWidget {
+  const EmptyHint({
+    super.key,
+    required this.icon,
+    required this.titulo,
+    this.subtitulo,
+    this.accion,
+    this.textoAccion,
+  });
+
+  final IconData icon;
+  final String titulo;
+  final String? subtitulo;
+  final VoidCallback? accion;
+  final String? textoAccion;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 12),
+      child: Column(
+        children: [
+          Icon(icon, size: 44, color: CrediColors.muted.withValues(alpha: 0.7)),
+          const SizedBox(height: 12),
+          Text(
+            titulo,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+          ),
+          if (subtitulo != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              subtitulo!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: CrediColors.muted),
+            ),
+          ],
+          if (accion != null && textoAccion != null) ...[
+            const SizedBox(height: 14),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: CrediColors.vino),
+              onPressed: accion,
+              child: Text(textoAccion!),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 class FiltroChip extends StatelessWidget {

@@ -58,11 +58,13 @@ lib/
   main.dart         # entrada de la app
   theme.dart        # colores y tema CrediAPP
   data.dart         # modelos y datos demo
+  calculadora.dart  # tasas flat CrediMax / mora / preview
   widgets.dart      # componentes reutilizables
   screens.dart      # pantallas del prototipo
   auth_service.dart # Control TDD (reglas RF001/RF002/RF003)
 test/
   auth_service_test.dart  # CP del Excel (Arrange-Act-Assert)
+  calculadora_test.dart   # tasas / mora CrediMax
 ```
 
 ## TDD (como el ejemplo de la profesora)
@@ -95,8 +97,16 @@ test/
 Correr todos los tests TDD:
 
 ```bash
-flutter test test/auth_service_test.dart test/tdd/all_rf_tdd_test.dart
+flutter test test/auth_service_test.dart test/tdd/all_rf_tdd_test.dart test/calculadora_test.dart
 ```
+
+## Tasas (estilo CrediMax)
+
+- Interés **flat** por defecto **20%** sobre el capital  
+- Plazos semanales: **4, 6, 8, 10, 12, 16**  
+- Mora: **S/ 10** por cada semana de atraso  
+- Configurable en **Perfil → Tasas e interés** o desde Inicio  
+- Al crear un préstamo verás **vista previa** del cronograma (interés, total, cuotas y fechas reales)
 
 ## Curso
 

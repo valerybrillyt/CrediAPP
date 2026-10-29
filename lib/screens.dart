@@ -150,7 +150,11 @@ BotonVino(
       ? null
       : () async {
           if (correo.text.trim().isEmpty || clave.text.isEmpty) {
-            aviso(context, 'Ingresa correo y contraseña');
+            aviso(context, 'Ingresa correo y contraseña', error: true);
+            return;
+          }
+          if (vCorreo(correo.text) != null) {
+            aviso(context, 'Correo inválido', error: true);
             return;
           }
 
@@ -186,20 +190,20 @@ BotonVino(
                   (usuario != null &&
                       usuario.intentosFallidos >= 5)) {
                 _iniciarBloqueo();
-                aviso(context, 'Cuenta bloqueada por 20 segundos');
+                aviso(context, 'Cuenta bloqueada por 20 segundos', error: true);
               } else {
-                aviso(context, 'Correo o contraseña incorrectos');
+                aviso(context, 'Correo o contraseña incorrectos', error: true);
               }
               break;
 
             case EstadoLogin.intentosExcedidos:
               clave.clear();
               _iniciarBloqueo();
-              aviso(context, 'Cuenta bloqueada por 20 segundos');
+              aviso(context, 'Cuenta bloqueada por 20 segundos', error: true);
               break;
 
             case EstadoLogin.errorServidor:
-              aviso(context, 'Error de conexión. Inténtalo nuevamente.');
+              aviso(context, 'Error de conexión. Inténtalo nuevamente.', error: true);
               break;
           }
         },
@@ -606,6 +610,7 @@ class HomePage extends StatelessWidget {
     final primero = store.nombre.split(' ').first;
 
     final proximas = store.proximasCuotas.take(3).toList();
+    final atrasados = store.prestamosAtrasados;
 
     return SafeArea(
       child: ListView(
@@ -644,6 +649,32 @@ class HomePage extends StatelessWidget {
               ),
             ],
           ),
+          if (atrasados.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Tarjeta(
+              color: const Color(0xFFFEE4E2),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PrestamosPage()),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Color(0xFFB42318)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      '${atrasados.length} préstamo${atrasados.length == 1 ? '' : 's'} atrasado${atrasados.length == 1 ? '' : 's'}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFB42318),
+                      ),
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right, color: Color(0xFFB42318)),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           Row(
             children: [
@@ -663,6 +694,46 @@ class HomePage extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _resumen(
+                  '${store.clientesActivos}',
+                  'Clientes activos',
+                  CrediColors.texto,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _resumen(
+                  '${store.configTasas.interesPctDefault.toStringAsFixed(0)}%',
+                  'Tasa default',
+                  CrediColors.vino,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Tarjeta(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const TasasConfigPage()),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.percent, color: CrediColors.vino),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Configurar tasas e interés',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                Icon(Icons.chevron_right),
+              ],
+            ),
           ),
           const SizedBox(height: 18),
           const Text(
@@ -938,6 +1009,132 @@ class AccionBloqueadaPage extends StatelessWidget {
   }
 }
 
+class TasasConfigPage extends StatefulWidget {
+  const TasasConfigPage({super.key});
+
+  @override
+  State<TasasConfigPage> createState() => _TasasConfigPageState();
+}
+
+class _TasasConfigPageState extends State<TasasConfigPage> {
+  late final interes = TextEditingController(
+    text: store.configTasas.interesPctDefault.toStringAsFixed(0),
+  );
+  late final mora = TextEditingController(
+    text: store.configTasas.recargoPorSemana.toStringAsFixed(0),
+  );
+  late int semanas = store.configTasas.semanasDefault;
+  late List<int> plazos = List<int>.from(store.configTasas.plazosPermitidos);
+
+  static const todosPlazos = [4, 6, 8, 10, 12, 16];
+
+  @override
+  void dispose() {
+    interes.dispose();
+    mora.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: barra('Tasas e interés'),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          const Text(
+            'Estilo CrediMax: interés flat sobre el capital y mora por semana de atraso.',
+            style: TextStyle(color: CrediColors.muted),
+          ),
+          const SizedBox(height: 16),
+          Campo(
+            label: 'Interés flat por defecto (%)',
+            controller: interes,
+            keyboard: TextInputType.number,
+            suffix: '%',
+          ),
+          Campo(
+            label: 'Mora por semana de atraso',
+            controller: mora,
+            keyboard: TextInputType.number,
+            suffix: 'S/',
+          ),
+          const Text(
+            'Plazo por defecto',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: todosPlazos.map((n) {
+              final sel = semanas == n;
+              return ChoiceChip(
+                label: Text('$n sem'),
+                selected: sel,
+                selectedColor: CrediColors.vinoOscuro,
+                labelStyle: TextStyle(
+                  color: sel ? Colors.white : CrediColors.texto,
+                  fontWeight: FontWeight.w700,
+                ),
+                showCheckmark: false,
+                onSelected: (_) => setState(() => semanas = n),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'Plazos permitidos',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: todosPlazos.map((n) {
+              final sel = plazos.contains(n);
+              return FilterChip(
+                label: Text('$n'),
+                selected: sel,
+                selectedColor: CrediColors.rosaSuave,
+                checkmarkColor: CrediColors.vino,
+                onSelected: (v) => setState(() {
+                  if (v) {
+                    plazos = [...plazos, n]..sort();
+                  } else if (plazos.length > 1) {
+                    plazos = plazos.where((x) => x != n).toList();
+                  }
+                }),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 20),
+          BotonVino(
+            texto: 'Guardar configuración',
+            onPressed: () {
+              final i = double.tryParse(interes.text.replaceAll(',', '.'));
+              final m = double.tryParse(mora.text.replaceAll(',', '.'));
+              if (i == null || i <= 0 || m == null || m < 0) {
+                aviso(context, 'Revisa interés y mora', error: true);
+                return;
+              }
+              if (!plazos.contains(semanas)) {
+                plazos = [...plazos, semanas]..sort();
+              }
+              store.actualizarConfigTasas(
+                interesPctDefault: i,
+                semanasDefault: semanas,
+                plazosPermitidos: plazos,
+                recargoPorSemana: m,
+              );
+              aviso(context, 'Tasas actualizadas');
+              Navigator.pop(context);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class PerfilPage extends StatefulWidget {
   const PerfilPage({super.key, this.token});
 
@@ -1102,6 +1299,26 @@ Future<void> _salir() async {
               ],
             ),
           ),
+          const SizedBox(height: 10),
+          Tarjeta(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const TasasConfigPage()),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.percent, color: CrediColors.vino),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Tasas e interés (CrediMax)',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                Icon(Icons.chevron_right),
+              ],
+            ),
+          ),
           TextButton(
             onPressed: _salir,
             child: const Text(
@@ -1170,48 +1387,57 @@ class _ClientesPageState extends State<ClientesPage> {
               ),
             ),
             const SizedBox(height: 8),
-            ...lista.map(
-              (c) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Tarjeta(
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => HistorialClientePage(cliente: c),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      AvatarIni(texto: c.iniciales),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              c.nombre,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            Text(
-                              'DNI ${c.dni}',
-                              style: const TextStyle(
-                                color: CrediColors.muted,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
+            if (lista.isEmpty)
+              EmptyHint(
+                icon: Icons.person_search_outlined,
+                titulo: 'Sin resultados',
+                subtitulo: q.isEmpty
+                    ? 'Aún no hay clientes registrados'
+                    : 'No hay clientes que coincidan con “$q”',
+              )
+            else
+              ...lista.map(
+                (c) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Tarjeta(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => HistorialClientePage(cliente: c),
                       ),
-                      ChipEstado(texto: store.estadoCliente(c)),
-                    ],
+                    ),
+                    child: Row(
+                      children: [
+                        AvatarIni(texto: c.iniciales),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                c.nombre,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              Text(
+                                'DNI ${c.dni}',
+                                style: const TextStyle(
+                                  color: CrediColors.muted,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        ChipEstado(texto: store.estadoCliente(c)),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),
@@ -1581,62 +1807,79 @@ class _PrestamosPageState extends State<PrestamosPage> {
               }).toList(),
             ),
             const SizedBox(height: 10),
-            ...lista.map((p) {
-              final c = store.clienteDe(p.clienteId);
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Tarjeta(
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => DetallePrestamoPage(prestamo: p),
+            if (lista.isEmpty)
+              EmptyHint(
+                icon: Icons.credit_card_off_outlined,
+                titulo: 'Sin préstamos',
+                subtitulo: 'No hay créditos con este filtro',
+                textoAccion: 'Nuevo préstamo',
+                accion: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const NuevoPrestamoPage()),
+                ),
+              )
+            else
+              ...lista.map((p) {
+                final c = store.clienteDe(p.clienteId);
+                final saldo =
+                    p.estado == EstadoPrestamo.cancelado ? 0.0 : p.saldo;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Tarjeta(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => DetallePrestamoPage(prestamo: p),
+                      ),
                     ),
-                  ),
-                  child: Row(
-                    children: [
-                      AvatarIni(texto: c.iniciales),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
+                      children: [
+                        AvatarIni(texto: c.iniciales),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                c.nombre,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              Text(
+                                'Préstamo #${p.codigo} · capital ${soles(p.monto)}',
+                                style: const TextStyle(
+                                  color: CrediColors.muted,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text(
-                              c.nombre,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                              ),
+                              soles(saldo),
+                              style: const TextStyle(fontWeight: FontWeight.w800),
                             ),
-                            Text(
-                              'Préstamo #${p.codigo}',
-                              style: const TextStyle(
+                            const Text(
+                              'saldo',
+                              style: TextStyle(
                                 color: CrediColors.muted,
-                                fontSize: 12,
+                                fontSize: 11,
                               ),
                             ),
+                            ChipEstado(texto: etiquetaEstado(p.estado)),
                           ],
                         ),
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            soles(
-                              p.estado == EstadoPrestamo.cancelado
-                                  ? 0
-                                  : p.monto,
-                            ),
-                            style: const TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                          ChipEstado(texto: etiquetaEstado(p.estado)),
-                        ],
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              );
-            }),
+                );
+              }),
           ],
         ),
       ),
@@ -1653,14 +1896,45 @@ class NuevoPrestamoPage extends StatefulWidget {
 
 class _NuevoPrestamoPageState extends State<NuevoPrestamoPage> {
   String clienteId = store.clientes.first.id;
-  final monto = TextEditingController(text: '800.00');
-  final tasa = TextEditingController(text: '5');
-  final cuotas = TextEditingController(text: '4');
+  final monto = TextEditingController(text: '1000');
+  late double interesPct = store.configTasas.interesPctDefault;
+  late int nCuotas = store.configTasas.semanasDefault;
   String frecuencia = 'Semanal';
-  final fecha = TextEditingController(text: '21/09/2026');
+  DateTime fechaInicio = DateTime.now();
+
+  static const tasasRapidas = [10.0, 15.0, 20.0, 25.0, 30.0];
+
+  PreviewCuotas get preview {
+    final m = double.tryParse(monto.text.replaceAll(',', '.')) ?? 0;
+    return calcularPreview(
+      capital: m,
+      interesPct: interesPct,
+      nCuotas: nCuotas,
+      fechaInicio: fechaInicio,
+      frecuencia: frecuencia,
+    );
+  }
+
+  Future<void> _elegirFecha() async {
+    final d = await showDatePicker(
+      context: context,
+      initialDate: fechaInicio,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+    );
+    if (d != null) setState(() => fechaInicio = d);
+  }
+
+  @override
+  void dispose() {
+    monto.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final p = preview;
+    final plazos = store.configTasas.plazosPermitidos;
     return Scaffold(
       appBar: barra('Nuevo préstamo'),
       body: ListView(
@@ -1679,22 +1953,58 @@ class _NuevoPrestamoPageState extends State<NuevoPrestamoPage> {
           ),
           const SizedBox(height: 14),
           Campo(
-            label: 'Monto del préstamo',
+            label: 'Capital',
             controller: monto,
             keyboard: TextInputType.number,
             suffix: 'S/',
+            onChanged: (_) => setState(() {}),
           ),
-          Campo(
-            label: 'Tasa de interés',
-            controller: tasa,
-            keyboard: TextInputType.number,
-            suffix: '%',
+          const Text(
+            'Interés flat (%)',
+            style: TextStyle(fontWeight: FontWeight.w600),
           ),
-          Campo(
-            label: 'Número de cuotas',
-            controller: cuotas,
-            keyboard: TextInputType.number,
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: tasasRapidas.map((t) {
+              final sel = interesPct == t;
+              return ChoiceChip(
+                label: Text('${t.toStringAsFixed(0)}%'),
+                selected: sel,
+                selectedColor: CrediColors.vinoOscuro,
+                labelStyle: TextStyle(
+                  color: sel ? Colors.white : CrediColors.texto,
+                  fontWeight: FontWeight.w700,
+                ),
+                showCheckmark: false,
+                onSelected: (_) => setState(() => interesPct = t),
+              );
+            }).toList(),
           ),
+          const SizedBox(height: 14),
+          const Text(
+            'Plazo (semanas / cuotas)',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: plazos.map((n) {
+              final sel = nCuotas == n;
+              return ChoiceChip(
+                label: Text('$n'),
+                selected: sel,
+                selectedColor: CrediColors.vinoOscuro,
+                labelStyle: TextStyle(
+                  color: sel ? Colors.white : CrediColors.texto,
+                  fontWeight: FontWeight.w700,
+                ),
+                showCheckmark: false,
+                onSelected: (_) => setState(() => nCuotas = n),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 14),
           const Text(
             'Frecuencia de pago',
             style: TextStyle(fontWeight: FontWeight.w600),
@@ -1706,34 +2016,100 @@ class _NuevoPrestamoPageState extends State<NuevoPrestamoPage> {
               'Semanal',
               'Quincenal',
               'Mensual',
+              'Diario',
             ].map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
             onChanged: (v) => setState(() => frecuencia = v!),
           ),
           const SizedBox(height: 14),
-          Campo(label: 'Fecha de emisión', controller: fecha),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text(
+              'Fecha de emisión',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(fechaLarga(fechaInicio)),
+            trailing: IconButton(
+              icon: const Icon(Icons.calendar_month, color: CrediColors.vino),
+              onPressed: _elegirFecha,
+            ),
+            onTap: _elegirFecha,
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: CrediColors.vinoOscuro,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Vista previa',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _previewFila('Interés', soles(p.interes)),
+                _previewFila('Total a pagar', soles(p.totalPagar)),
+                _previewFila('Cuota', soles(p.cuota)),
+                _previewFila('Letras', '${p.letras.length}'),
+                if (p.letras.isNotEmpty) ...[
+                  const Divider(color: Colors.white24),
+                  Text(
+                    '1ª: ${fechaCorta(p.letras.first.fecha)} · última: ${fechaCorta(p.letras.last.fecha)}',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
           BotonVino(
             texto: 'Registrar préstamo',
             onPressed: () {
               final m = double.tryParse(monto.text.replaceAll(',', '.'));
-              final t = double.tryParse(tasa.text.replaceAll(',', '.'));
-              final n = int.tryParse(cuotas.text);
-              if (m == null || t == null || n == null || n <= 0) {
-                aviso(context, 'Revisa monto, tasa y cuotas');
+              if (m == null || m <= 0) {
+                aviso(context, 'Ingresa un capital válido', error: true);
                 return;
               }
-              final p = store.registrarPrestamo(
+              final prestamo = store.registrarPrestamo(
                 clienteId: clienteId,
                 monto: m,
-                tasa: t,
-                nCuotas: n,
+                tasa: interesPct,
+                nCuotas: nCuotas,
                 frecuencia: frecuencia,
-                fecha: fecha.text.trim(),
+                fecha: fechaLarga(fechaInicio),
               );
               Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(builder: (_) => CronogramaPage(prestamo: p)),
+                MaterialPageRoute(
+                  builder: (_) => CronogramaPage(prestamo: prestamo),
+                ),
               );
             },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _previewFila(String k, String v) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(k, style: const TextStyle(color: Colors.white70)),
+          ),
+          Text(
+            v,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),
@@ -1749,6 +2125,8 @@ class CronogramaPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cliente = store.clienteDe(prestamo.clienteId);
+    final interes = redondear2(prestamo.monto * (prestamo.tasa / 100));
+    final total = redondear2(prestamo.monto + interes);
     return Scaffold(
       appBar: barra('Cronograma de pagos'),
       body: ListView(
@@ -1759,8 +2137,45 @@ class CronogramaPage extends StatelessWidget {
             style: const TextStyle(fontWeight: FontWeight.w800),
           ),
           Text(
-            '${prestamo.frecuencia} · ${soles(prestamo.monto)}',
+            '${prestamo.frecuencia} · capital ${soles(prestamo.monto)} · ${prestamo.tasa.toStringAsFixed(0)}%',
             style: const TextStyle(color: CrediColors.muted),
+          ),
+          const SizedBox(height: 10),
+          Tarjeta(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Interés',
+                        style: TextStyle(color: CrediColors.muted, fontSize: 12),
+                      ),
+                      Text(
+                        soles(interes),
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      const Text(
+                        'Total',
+                        style: TextStyle(color: CrediColors.muted, fontSize: 12),
+                      ),
+                      Text(
+                        soles(total),
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 12),
           ...prestamo.cuotas.map((c) {
@@ -2079,6 +2494,12 @@ class _RegistrarPagoPageState extends State<RegistrarPagoPage> {
   final monto = TextEditingController();
   final fecha = TextEditingController(text: hoyTexto());
 
+  void _aplicarMonto(Cuota cuota) {
+    final mora = store.moraDeCuota(cuota);
+    final sugerido = redondear2(cuota.monto + mora);
+    monto.text = sugerido.toStringAsFixed(2);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -2086,7 +2507,11 @@ class _RegistrarPagoPageState extends State<RegistrarPagoPage> {
         .where((x) => x.estado != EstadoCuota.pagada)
         .toList();
     seleccion = widget.cuota ?? (pend.isEmpty ? null : pend.first);
-    monto.text = seleccion?.monto.toStringAsFixed(2) ?? '';
+    if (seleccion != null) {
+      _aplicarMonto(seleccion!);
+    } else {
+      monto.text = '';
+    }
   }
 
   @override
@@ -2096,6 +2521,8 @@ class _RegistrarPagoPageState extends State<RegistrarPagoPage> {
     final pendientes = p.cuotas
         .where((x) => x.estado != EstadoCuota.pagada)
         .toList();
+    final moraSel =
+        seleccion == null ? 0.0 : store.moraDeCuota(seleccion!);
 
     return Scaffold(
       appBar: barra('Registrar pago'),
@@ -2166,13 +2593,14 @@ class _RegistrarPagoPageState extends State<RegistrarPagoPage> {
           if (pendientes.isEmpty) const Text('No hay cuotas pendientes.'),
           ...pendientes.map((cuota) {
             final sel = seleccion == cuota;
+            final mora = store.moraDeCuota(cuota);
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Tarjeta(
                 color: sel ? CrediColors.rosaSuave : Colors.white,
                 onTap: () => setState(() {
                   seleccion = cuota;
-                  monto.text = cuota.monto.toStringAsFixed(2);
+                  _aplicarMonto(cuota);
                 }),
                 child: Row(
                   children: [
@@ -2186,7 +2614,9 @@ class _RegistrarPagoPageState extends State<RegistrarPagoPage> {
                           ),
                           Text(
                             cuota.estado == EstadoCuota.vencida
-                                ? 'VENCIDA'
+                                ? (mora > 0
+                                    ? 'VENCIDA · mora ${soles(mora)}'
+                                    : 'VENCIDA')
                                 : 'PENDIENTE',
                             style: const TextStyle(
                               fontSize: 12,
@@ -2197,7 +2627,7 @@ class _RegistrarPagoPageState extends State<RegistrarPagoPage> {
                       ),
                     ),
                     Text(
-                      soles(cuota.monto),
+                      soles(redondear2(cuota.monto + mora)),
                       style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
                   ],
@@ -2205,6 +2635,18 @@ class _RegistrarPagoPageState extends State<RegistrarPagoPage> {
               ),
             );
           }),
+          if (moraSel > 0)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                'Se sugiere incluir mora de ${soles(moraSel)} (S/ ${store.configTasas.recargoPorSemana.toStringAsFixed(0)} / semana).',
+                style: const TextStyle(
+                  color: Color(0xFFB42318),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ),
           Campo(
             label: 'Monto recibido',
             controller: monto,
@@ -2220,13 +2662,14 @@ class _RegistrarPagoPageState extends State<RegistrarPagoPage> {
                 : () {
                     final m = double.tryParse(monto.text.replaceAll(',', '.'));
                     if (m == null || m <= 0) {
-                      aviso(context, 'Ingresa un monto válido');
+                      aviso(context, 'Ingresa un monto válido', error: true);
                       return;
                     }
                     if (m < seleccion!.monto) {
                       aviso(
                         context,
                         'El monto es menor a la cuota (${soles(seleccion!.monto)})',
+                        error: true,
                       );
                       return;
                     }
